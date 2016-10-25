@@ -1,4 +1,4 @@
-// Projeto 10 -  Controle de temperatura com LCD e Cooler
+﻿// Projeto 10 -  Controle de temperatura com LCD e Cooler
 
 #include <LiquidCrystal.h>
 
@@ -10,20 +10,20 @@ const int fan = 12;                             // Declara o pino digital 13 par
 const int led = 13;
 
 // Serial protocol
-const unsigned char readHeader = 'r'; //72;
-const unsigned char writeHeader = 'w';//27;
-const unsigned char type_temp = '1';
-const unsigned char type_light = '2';
-const unsigned char type_specie = '4';
-const unsigned char type_status = '8';
+const unsigned char readHeader = 72;
+const unsigned char writeHeader = 27;
+const unsigned char type_temp = 1;
+const unsigned char type_light = 2;
+const unsigned char type_specie = 4;
+const unsigned char type_status = 8;
 const unsigned char type_time = 16;
 const unsigned char type_log = 64;
 
 struct protocol {
     unsigned char header;
     unsigned char type;
-    int size;
-    unsigned char data[];
+    unsigned char size;
+    unsigned char data[20];
     uint16_t checksum;
 };
 
@@ -52,7 +52,7 @@ short profilePart;
 
 
 //DEBUG MODE 1 = true, 0 = false
-int debugMode = 1;
+int debugMode = 0;
 
 
 // Cria um objeto LCD e atribui os pinos
@@ -76,7 +76,7 @@ void setup() {
     profilePart = 0;
 
 
-    Serial.begin(9600);
+    Serial.begin(9600, SERIAL_8N1);
     pinMode(fan, OUTPUT);                       // Define o pino 13 como saída
     pinMode(led, OUTPUT);
     lcd.begin(16, 2);                           // Define o display com 16 colunas e 2 linhas
@@ -163,6 +163,8 @@ void printLCD() {
 void checkSerial() {
     //Check if there is any data available to read
     if (Serial.available() > 0) {
+
+        //Serial.write("CHEGOU!!");
         //read only one byte at a time
         unsigned char header = Serial.read();
 
@@ -186,7 +188,15 @@ void checkSerial() {
                 read.data[0] = valorLuz;
             }
             else if (read.type == type_specie) {
-
+                int i = 0;
+                while(true){
+                    if (currentProfile.specie[i] != 0){
+                        read.data[i] = currentProfile.specie[i];
+                        i++;
+                        read.size = i;
+                    }
+                    else {break;}
+                }
             }
             else if (read.type == type_status) {
 
@@ -198,10 +208,12 @@ void checkSerial() {
 
             }
 
-            Serial.write("Leitura\n");
-
             clearSerial();
             writeSerial(read);
+
+            if (debugMode) {
+                Serial.write("Leitura\n");
+            }
         }
         else if (header == writeHeader) {
 
@@ -236,7 +248,9 @@ void checkSerial() {
                 clearSerial();
                 profilePart++;
             }
-            Serial.write("GRAVACAO\n");
+            if (debugMode) {
+                Serial.write("Gravação\n");
+            }
 
             struct protocol write;
 
@@ -247,26 +261,27 @@ void checkSerial() {
 
             writeSerial(write);
 
-            if(profilePart >= 3){
+            if (profilePart >= 3) {
                 profiles[profileCount++] = newProfile;
                 profilePart = 0;
             }
         }
         else {
-            Serial.write("LEU MAS N ENTENDEU\n");
+            if (debugMode) {
+                Serial.write("EU MAS N ENTENDEU\n");
+            }
+            clearSerial();
         }
     }
 }
 
 void writeSerial(struct protocol toWrite) {
-
-    int buffer_size = sizeof(toWrite);
-
-    unsigned char buffer[buffer_size];
-    memcpy(buffer, &toWrite, sizeof(toWrite));
-
-    Serial.write(buffer, buffer_size);
-    Serial.write("\n");
+    Serial.write(toWrite.header);
+    Serial.write(toWrite.type);
+    Serial.write(toWrite.size);
+    Serial.write(0);
+    Serial.write(toWrite.data, toWrite.size);
+    Serial.write(0);
 }
 
 void clearSerial() {
